@@ -122,6 +122,25 @@ pub fn dispatch() {
     }
 
     match argv[1].as_str() {
+        "interaction" => {
+            let action = argv.get(2).map(String::as_str).unwrap_or("status");
+            if argv.len() > 3 || !matches!(action, "status" | "pause" | "resume") {
+                eprintln!("Usage: AskHuman interaction [status|pause|resume]");
+                exit(1);
+            }
+            if action != "status" {
+                if let Err(error) = crate::interaction_control::set_paused(action == "pause") {
+                    eprintln!("AskHuman: {error}");
+                    exit(1);
+                }
+            }
+            print_line(if crate::interaction_control::paused() {
+                "AskHuman paused — use the Agent's native conversation"
+            } else {
+                "AskHuman active — interaction is handled by AskHuman"
+            });
+            exit(0);
+        }
         "__dev-window" => {
             if let Err(error) = crate::development::workbench::run_window(
                 argv.get(2).map(String::as_str).unwrap_or("settings"),
@@ -579,13 +598,16 @@ pub fn dispatch() {
                 let project = crate::project::detect();
                 // 跨 Mac 待办同步（spec todo-sync §6.3）：构建待办选项（含 ⚡ 自动路径）之前，
                 // 本地阶段 + 「过期才拉」（≤1.5 秒，永不阻塞或失败）。未启用时一次 stat。
-                if parsed.whats_next {
+                if parsed.whats_next && !crate::interaction_control::paused() {
                     crate::todo_sync::service::before_whats_next(&project);
                 }
                 // 自动执行待办（第 17 轮定案）：whats-next 且存在自动待办 → 不发卡提问，直接
                 // 出队最靠前的一条并打印其原文（agent 把它当作下一个任务）；完成报告照常落回复
                 // 历史。被并发拿走（竞态）→ 回落正常提问。Stop 卡不走此路径。
-                if parsed.whats_next && try_whats_next_auto(&project, &message, lang) {
+                if parsed.whats_next
+                    && !crate::interaction_control::paused()
+                    && try_whats_next_auto(&project, &message, lang)
+                {
                     return;
                 }
                 // whats-next (spec D2): fixed question + suggestions + todo chips + a final end

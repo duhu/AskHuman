@@ -136,6 +136,7 @@ fn core(invoke: Invoke<Wry>) -> bool {
         crate::commands::submit_confirm_action,
         crate::commands::confirm_popup_ready,
         crate::commands::cancel_popup,
+        crate::commands::set_interaction_paused,
         crate::commands::open_path,
         crate::commands::popup_preview_layout,
         crate::commands::popup_preview_prepare,

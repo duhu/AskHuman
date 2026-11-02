@@ -12,7 +12,14 @@ pub struct Tracker {
     seen: HashSet<String>,
 }
 impl Tracker {
+    fn skip_request(&mut self, key: &str, paused: bool) -> bool {
+        if paused {
+            self.seen.insert(key.to_string());
+        }
+        self.seen.contains(key)
+    }
     pub fn tick(&mut self, bridge: &Arc<Bridge>, waiting: &[(String, String, String)]) {
+        let paused = crate::interaction_control::paused();
         let sessions = bridge.sessions.lock().unwrap().clone();
         let mut live = HashSet::new();
         if sessions.is_empty() {
@@ -31,7 +38,7 @@ impl Tracker {
             for request in &live_requests(s) {
                 let key = format!("{sid}:{:?}:{request}", s.owner);
                 live.insert(key.clone());
-                if self.seen.contains(&key) {
+                if self.skip_request(&key, paused) {
                     continue;
                 }
                 let approval = request["method"]
@@ -266,6 +273,19 @@ async fn forward(
     r: &Value,
     message: ClientMsg,
 ) -> Result<(), String> {
+    crate::interaction_control::while_active(forward_active(bridge, sid, s, r, message))
+        .await
+        .unwrap_or(Ok(()))
+}
+
+async fn forward_active(
+    bridge: &Arc<Bridge>,
+    sid: &str,
+    s: &Session,
+    r: &Value,
+    message: ClientMsg,
+) -> Result<(), String> {
+    let interaction_state = crate::interaction_control::snapshot();
     let stream = ipc::transport::connect().await.map_err(|e| e.to_string())?;
     let (reader, mut writer) = stream.into_split();
     let mut reader = tokio::io::BufReader::new(reader);
@@ -305,7 +325,9 @@ async fn forward(
             _=tokio::time::sleep(Duration::from_millis(500))=>if !still_pending(bridge,sid,&s.owner,r) {return Ok(());}
         }
     };
-    if !still_pending(bridge, sid, &s.owner, r) {
+    if !still_pending(bridge, sid, &s.owner, r)
+        || crate::interaction_control::interrupted_since(&interaction_state)
+    {
         return Ok(());
     }
     let Some((method, payload)) = response(r, &decision) else {
@@ -401,6 +423,15 @@ fn response(r: &Value, answer: &Value) -> Option<(&'static str, Value)> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn pausing_keeps_native_questions_in_the_app_without_retaking_them_on_resume() {
+        let mut tracker = Tracker::default();
+        assert!(!tracker.skip_request("new-question", false));
+        assert!(tracker.skip_request("native-question", true));
+        assert!(tracker.skip_request("native-question", false));
+        assert!(!tracker.skip_request("later-question", false));
+    }
+
     #[test]
     fn async_questions_expire_when_answered_or_disconnected() {
         let mut s = Session {

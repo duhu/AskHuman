@@ -1335,6 +1335,9 @@ pub fn tr(lang: Lang, key: &'static str) -> &'static str {
 
         // —— 菜单栏 / 托盘（GUI 宿主，spec D7）——
         // 状态区（只读）。
+        "tray.interactionPaused" => pick(lang, "AskHuman — paused (native conversation)", "AskHuman — 已暂停接管（原生对话）"),
+        "tray.pauseInteraction" => pick(lang, "Pause takeover · use native conversation", "暂停接管 · 使用 Agent 原生对话"),
+        "tray.resumeInteraction" => pick(lang, "Resume AskHuman takeover", "恢复 AskHuman 接管"),
         "tray.running" => pick(lang, "AskHuman — running", "AskHuman — 运行中"),
         "tray.stopped" => pick(lang, "AskHuman — not running", "AskHuman — 未运行"),
         "tray.version" => pick(lang, "Version {v}", "版本 {v}"),

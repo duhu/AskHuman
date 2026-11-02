@@ -181,6 +181,7 @@ export default {
     prev: "Previous",
     next: "Next",
     nav: {
+      pauseInteraction: "Pause AskHuman on this computer; reply in the Agent conversation",
       agentConsole: "View in Agent Window",
       pin: "Keep on top",
       todos: "Project todos",

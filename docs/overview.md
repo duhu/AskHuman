@@ -481,6 +481,14 @@ Daemon 里的又一个渠道：手机上的 AskHuman App 回答问题、看 / �
 - `agents update [<agent>]` 按当前 mode 重新 reconcile 单家或全部托管产物；重复设置相同 mode 也会完整更新，但不改独立保存的 capability 偏好。
 - `config` 是通用键值兜底，`doctor` 汇总 Daemon、已装二进制、渠道和集成；两者复用同一配置与集成模块，不维护第二套逻辑。`doctor install` 单独检查已装二进制（`install.sh` 装完后调用）。
 
+## 手动暂停与恢复接管
+
+菜单栏与作答窗口可暂停本机接管，CLI 为 `AskHuman interaction status|pause|resume`。
+状态由 `interaction_control.rs` 持久化，CLI / MCP 在暂停时交回原生对话，权限 Hook 回到原生审批，
+Stop 不再拦截；生命周期跟踪与配置保留。在途客户端释放 IPC，协调器拒绝迟到作答。
+Codex / Claude 的 mode-owned `UserPromptSubmit` Hook 通知当前模式。具体语义与验证边界见
+[`手动接管`](specs/manual-interaction-takeover.md)。
+
 ## MCP 支持（CLI 之外的第二种集成形态）
 
 > 需求 `docs/specs/mcp.md`，计划 `docs/plans/mcp.md`。

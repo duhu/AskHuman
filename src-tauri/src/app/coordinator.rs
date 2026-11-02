@@ -40,6 +40,7 @@ pub(crate) struct HistoryBinding {
 }
 
 pub struct Coordinator {
+    interaction_state: crate::interaction_control::State,
     inner: Mutex<Inner>,
     terminal: FirstTerminalGate<()>,
     /// 结果渲染 / 收尾文案使用的界面语言（Daemon 模式为调用方上送的 lang；单进程为 `Lang::current()`）。
@@ -184,6 +185,7 @@ impl Coordinator {
                 headless,
             }),
             terminal: FirstTerminalGate::new(),
+            interaction_state: crate::interaction_control::snapshot(),
             lang,
             project,
             source,
@@ -318,6 +320,9 @@ impl Coordinator {
     /// Return whether this submission won, so a shared popup can acknowledge only its own
     /// request without treating a rejected or stale answer as a new human decision.
     pub fn try_submit(self: &Arc<Self>, mut result: ChannelResult) -> bool {
+        if crate::interaction_control::interrupted_since(&self.interaction_state) {
+            return false;
+        }
         if !self.terminal.try_set(()) {
             return false;
         }

@@ -86,6 +86,7 @@ fn release_lock() {
 
 #[derive(Clone, Default)]
 pub struct TrayData {
+    pub interaction_paused: bool,
     pub running: bool,
     pub version: String,
     pub uptime_secs: u64,
@@ -343,6 +344,7 @@ pub fn setup(app: &mut tauri::App, config: &AppConfig) -> tauri::Result<()> {
     start_ipc_listener(handle.clone());
     start_status_subscription(handle.clone());
     start_config_watch(handle.clone());
+    start_interaction_watch(handle.clone());
     start_binary_watch(handle.clone());
 
     // 启动宽限：12s 后标记并复核退出（覆盖 OpenWindow 始终未到达的极端情况）。
@@ -648,7 +650,8 @@ pub fn refresh_tray(app: &AppHandle) {
         return;
     };
     let up = state.daemon_up.load(Ordering::SeqCst);
-    let data = state.data.lock().unwrap().clone();
+    let mut data = state.data.lock().unwrap().clone();
+    data.interaction_paused = crate::interaction_control::paused();
     let integration_updates = state.integration_updates.lock().unwrap().clone();
     let update_action = state.update_action.lock().unwrap().clone();
     let lang = state.lang();
@@ -696,7 +699,9 @@ pub fn refresh_tray(app: &AppHandle) {
             &update_action,
         ));
     }
-    let mut tip = if up {
+    let mut tip = if data.interaction_paused {
+        i18n::tr(lang, "tray.interactionPaused").to_string()
+    } else if up {
         i18n::tr(lang, "tray.tooltipRunning").to_string()
     } else {
         i18n::tr(lang, "tray.tooltipStopped").to_string()
@@ -761,7 +766,7 @@ fn menu_signature(
         .collect::<Vec<_>>()
         .join(";");
     format!(
-        "{:?}|{}|{}|{}|{}|{}|{}|{}|{}|{}|{}|{}|{}|{}|{}|{}|{}|{}|{:?}|{}",
+        "{:?}|{}|{}|{}|{}|{}|{}|{}|{}|{}|{}|{}|{}|{}|{}|{}|{}|{}|{:?}|{}|{}",
         lang,
         up as u8,
         data.version,
@@ -788,6 +793,7 @@ fn menu_signature(
         integration_updates.join(","),
         update_action,
         dark_tray as u8,
+        data.interaction_paused,
     )
 }
 
@@ -888,7 +894,9 @@ fn build_specs(
     let mut nodes: Vec<Node> = Vec::new();
 
     // —— 状态区（只读）——
-    let title = if up {
+    let title = if data.interaction_paused {
+        i18n::tr(lang, "tray.interactionPaused").to_string()
+    } else if up {
         i18n::tr(lang, "tray.running").to_string()
     } else {
         i18n::tr(lang, "tray.stopped").to_string()
@@ -965,6 +973,22 @@ fn build_specs(
 
     // —— 操作区 ——
     nodes.push(Node::separator("sep.actions"));
+    nodes.push(Node::item(
+        if data.interaction_paused {
+            "interaction_resume"
+        } else {
+            "interaction_pause"
+        },
+        i18n::tr(
+            lang,
+            if data.interaction_paused {
+                "tray.resumeInteraction"
+            } else {
+                "tray.pauseInteraction"
+            },
+        ),
+        true,
+    ));
     // 「待答」放在操作区最前、独立一段——它是唯一可点的状态项，混在上方一堆灰色只读行里显得乱。
     if up && data.active_requests > 0 {
         let title = i18n::tr(lang, "tray.pendingQuestions")
@@ -1277,6 +1301,17 @@ fn truncate_chars(s: &str, max: usize) -> String {
 
 /// 托盘菜单事件分派（由 launch() 的全局 `on_menu_event` 在宿主进程中调用）。
 pub fn on_menu_event(app: &AppHandle, id: &str) {
+    if matches!(id, "interaction_pause" | "interaction_resume") {
+        if let Err(error) = crate::interaction_control::set_paused(id == "interaction_pause") {
+            use tauri_plugin_dialog::DialogExt;
+            app.dialog()
+                .message(error.to_string())
+                .title("AskHuman")
+                .show(|_| {});
+        }
+        refresh_tray(app);
+        return;
+    }
     // 待答子菜单项：聚焦对应弹窗（向 daemon 发 FocusRequest，由 daemon 转发到该请求的弹窗进程）。
     if let Some(request_id) = id.strip_prefix("focus_req:") {
         let request_id = request_id.to_string();
@@ -1874,6 +1909,7 @@ fn start_status_subscription(app: AppHandle) {
                                     );
                                 if let Some(state) = app.try_state::<HostState>() {
                                     *state.data.lock().unwrap() = TrayData {
+                                        interaction_paused: crate::interaction_control::paused(),
                                         running,
                                         version,
                                         uptime_secs,
@@ -1985,6 +2021,21 @@ fn refresh_binary_on_main(app: &AppHandle) {
 }
 
 // ===== 配置监听（模式 / 语言 / 登录项）=====
+
+// Observe changes from the popup and CLI even when no daemon is running.
+fn start_interaction_watch(app: AppHandle) {
+    tauri::async_runtime::spawn(async move {
+        let mut paused = crate::interaction_control::paused();
+        loop {
+            tokio::time::sleep(std::time::Duration::from_millis(500)).await;
+            let current = crate::interaction_control::paused();
+            if current != paused {
+                paused = current;
+                refresh_on_main(&app);
+            }
+        }
+    });
+}
 
 fn start_config_watch(app: AppHandle) {
     std::thread::spawn(move || {

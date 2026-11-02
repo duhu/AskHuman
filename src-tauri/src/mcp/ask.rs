@@ -482,7 +482,7 @@ any input that only the human can provide. Provide `message` for free-form quest
 `questions` for structured choices. Each `questions` item requires `question`; each nested \
 `options` item requires `text` and may set `recommended` to true. Example: \
 `{\"questions\":[{\"question\":\"Continue?\",\"options\":[{\"text\":\"Yes\",\"recommended\":true}]}]}`. \
-The reply is plain text in labeled blocks: `[selected_options]`, `[user_input]`, `[files]` (paths \
+If the tool reports an explicit user-controlled pause, present the pending content in the native Agent conversation and do not retry this turn. The reply is plain text in labeled blocks: `[selected_options]`, `[user_input]`, `[files]` (paths \
 of files the human attached), and `[status]` (present on cancel or for a replayed earlier answer \
 — follow its instructions). Answers to multiple questions come back grouped under `# Q1`, `# Q2`, \
 … separated by `---`. Images the human attaches are also returned as image content.",

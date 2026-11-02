@@ -2,7 +2,8 @@
 // 顶部导航栏：来源头部（agent/workspace 胶囊 + 相对时间）+ 右侧动作（自更新入口/置顶/待办/
 // 历史/设置）。多根组件：navbar 之外还含自更新浮层背板与「更新待生效」横条（保持 .popup 的
 // flex 子级顺序）。
-import { computed } from "vue";
+import { computed, ref } from "vue";
+import { setInteractionPaused } from "../../lib/ipc";
 import SessionIcon from "../../components/SessionIcon.vue";
 import SourcePopover from "./SourcePopover.vue";
 import { useI18n } from "vue-i18n";
@@ -10,6 +11,15 @@ import { usePopupContext } from "./context";
 import { usePopupWindowTitle } from "./usePopupWindowTitle";
 
 const { t } = useI18n();
+const pauseError = ref("");
+const pausing = ref(false);
+async function pauseInteraction() {
+  pausing.value = true;
+  pauseError.value = "";
+  try { await setInteractionPaused(true); }
+  catch (error) { pauseError.value = String(error); }
+  finally { pausing.value = false; }
+}
 const {
   request,
   scrolled,
@@ -135,6 +145,14 @@ usePopupWindowTitle(sessionTitle, popupActive);
     </span>
     <span class="nav-actions">
       <span class="nav-actions-btns">
+        <span v-if="pauseError" role="alert" class="pause-error">{{ pauseError }}</span>
+        <button class="nav-btn" type="button" :disabled="pausing"
+          :title="t('popup.nav.pauseInteraction')" :aria-label="t('popup.nav.pauseInteraction')"
+          @click="pauseInteraction">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true">
+            <path d="M8 5v14M16 5v14" />
+          </svg>
+        </button>
         <div v-if="updateAvailable" class="update-wrap">
           <button
             class="nav-btn update-btn"
@@ -275,6 +293,7 @@ usePopupWindowTitle(sessionTitle, popupActive);
 </template>
 
 <style>
+.pause-error { max-width: 12rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--danger, #b42318); font-size: 12px; }
 /*
  * The Agent session title (docs/specs/popup-session-info.md). macOS only: Windows / Linux show it in the
  * native window title instead.

@@ -177,6 +177,7 @@ export default {
     prev: "上一个",
     next: "下一个",
     nav: {
+      pauseInteraction: "暂停本机 AskHuman 接管，回到 Agent 对话中回复",
       agentConsole: "在 Agent 窗口中查看",
       pin: "窗口置顶",
       todos: "项目待办",

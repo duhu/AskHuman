@@ -3,6 +3,26 @@
 记录需要跨会话保留的未完成 / 延期事项和明确下一步。任务 / 需求完成后删除其 section
 （历史留在 git）。
 
+## 待验收：手动暂停与恢复接管的真实 Agent 会话
+
+2026-11-02 用户确认并已实现本机全局手动暂停 / 恢复，分支 `feat/manual-takeover`，
+规格 [`manual-interaction-takeover`](specs/manual-interaction-takeover.md)。已备份并安装到日常 npm
+原生二进制位置，Codex 保留 MCP、Claude 保留 CLI；两家集成已更新，Codex Hook 已验证受信任。
+备份在本树 `.askhuman-dev/backups/manual-takeover-20261102-190538/`（私有，不入库）。
+
+验证：类型检查、1079 项 Vitest、图标检查；Rust 全套 2329 通过 / 11 忽略，最后 Codex App
+原生请求桥保护后的 26 项定向测试通过；私有 IPC 回归覆盖在途 CLI/MCP、原生权限回退、双 Agent
+模式提示、JSON 不伪造答案和自动待办不出队。用户在隔离开发版和日常版分别点击顶部暂停按钮，
+两个真实等待均返回 paused 状态并正常解除。Dev 随后恢复，再按用户要求退出并禁用；日常版保留
+用户最后选择的暂停状态。更新内容随 `feat/manual-takeover` 分支提交。
+
+安装时曾将 npm JS 包装入口用于 Dev system binary，引发递归启动；已终止任务自有递归进程，
+改用原生路径，集成更新成功。开发配置现已禁用，不残留该路由。
+
+剩余真实会话边界：首次升级后需重开 / 重新加载 Codex、Claude 会话，确认每回合 Hook 反映
+暂停 / 恢复；真实权限请求、Stop 和 Claude 原对话展示未用真实模型运行，不能把 IPC 回归当作
+这些场景的真人验收。首次升级后开关本身不要求反复重启，恢复不自动续跑已结束的 Agent。
+
 ## 待验收：项目开发环境的真实渠道与界面
 
 [PR #27](https://github.com/Naituw/AskHuman/pull/27) 已按项目级 rules／MCP、幂等准备和完整转送边界重做；

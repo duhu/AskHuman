@@ -65,6 +65,10 @@ enum ParseOutcome {
 
 pub fn run(agent: Option<&str>) -> Option<String> {
     let agent = Agent::parse(agent)?;
+    // Pausing hands approval back to the native UI, before any remembered auto-allow logic.
+    if crate::interaction_control::paused() {
+        return None;
+    }
     let mut bytes = Vec::new();
     std::io::stdin()
         .take(MAX_STDIN_BYTES + 1)

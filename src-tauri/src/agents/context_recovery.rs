@@ -32,6 +32,22 @@ pub fn run(args: &[String]) {
         super::session_info::capture_hook(kind, input, &env);
     }
     let output = match event {
+        "interaction-status" => {
+            let session_id = input
+                .as_ref()
+                .and_then(delegated::session_id_of)
+                .unwrap_or_default();
+            if mode(kind) == Mode::None
+                || (kind == AgentKind::Codex
+                    && delegated::silenced(&session_id, input.as_ref()).is_some())
+            {
+                None
+            } else {
+                Some(interaction_status_output(
+                    crate::interaction_control::paused(),
+                ))
+            }
+        }
         "session-start" => session_start_output(kind, mode(kind), input.as_ref()),
         "pre-tool-use" => pre_tool_output(kind, input.as_ref(), &env),
         _ => None,
@@ -39,6 +55,16 @@ pub fn run(args: &[String]) {
     if let Some(output) = output {
         println!("{output}");
     }
+}
+
+fn interaction_status_output(paused: bool) -> String {
+    serde_json::json!({
+        "hookSpecificOutput": {
+            "hookEventName": "UserPromptSubmit",
+            "additionalContext": crate::interaction_control::turn_context(paused),
+        }
+    })
+    .to_string()
 }
 
 fn mode(kind: AgentKind) -> Mode {
@@ -476,6 +502,26 @@ fn session_id_from_hook(
 mod tests {
     use super::*;
     use serde_json::json;
+
+    #[test]
+    fn interaction_status_uses_native_event_and_explicit_mode_exception() {
+        for paused in [true, false] {
+            let output: Value = serde_json::from_str(&interaction_status_output(paused)).unwrap();
+            assert_eq!(
+                output["hookSpecificOutput"]["hookEventName"],
+                "UserPromptSubmit"
+            );
+            let text = output["hookSpecificOutput"]["additionalContext"]
+                .as_str()
+                .unwrap();
+            if paused {
+                assert!(text.contains("native Agent conversation"));
+                assert!(text.contains("Native permission approvals remain required"));
+            } else {
+                assert!(text.contains("supersedes any earlier paused-mode notice"));
+            }
+        }
+    }
 
     #[test]
     fn todo_tools_share_trusted_hook_binding_without_exposing_identity_arguments() {

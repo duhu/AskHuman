@@ -48,3 +48,13 @@ macOS 的「Agents → Cursor」集成卡提供 **禁止后台完成后自动续
 ## Codex MCP 环境变量
 
 可显式运行 `AskHuman agents mode codex mcp --env DISPLAY=:1` 配置 MCP server 环境变量。`--env NAME=VALUE` 可重复；同名变量以最后一次为准，值可为空或包含 `=`。变量名不可为空或包含 `=`、NUL，值不可包含 NUL。仅 Codex MCP 模式支持该选项。安装和更新保留未指定的环境变量；Claude/Cursor 更新也保留已有 JSON `env`。无效环境配置会中止写入。此行为需主动启用，不会自动注入桌面环境变量。
+
+## 临时回到 Agent 原生对话
+
+在菜单栏选择「暂停接管 · 使用 Agent 原生对话」，或点击作答窗口顶部的暂停按钮。
+本机所有 Agent 的问答、报告和结束确认都会交回原生交互，正在执行的任务继续运行，权限仍需正常审批。
+离开电脑前，在菜单栏选择「恢复 AskHuman 接管」。暂停状态会跨重启保留，不会自动恢复。
+已有问题由 Agent 在原对话重新展示，恢复后不会重复推送旧问题。
+
+也可使用 `AskHuman interaction pause`、`AskHuman interaction resume` 和 `AskHuman interaction status`。
+Codex / Claude 已有集成需在 Agents 设置中更新产物，新状态提示才会随回合开始注入。

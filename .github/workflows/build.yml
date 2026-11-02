@@ -166,6 +166,10 @@ jobs:
         if: startsWith(matrix.os, 'ubuntu') || matrix.target == 'aarch64-apple-darwin'
         run: node scripts/dev-relay-smoke.mjs src-tauri/target/${{ matrix.target }}/release/AskHuman
 
+      - name: interaction takeover regression (private Unix IPC fixtures)
+        if: startsWith(matrix.os, 'ubuntu') || matrix.target == 'aarch64-apple-darwin'
+        run: node scripts/interaction-control-smoke.mjs src-tauri/target/${{ matrix.target }}/release/AskHuman
+
       - uses: actions/upload-artifact@v6
         with:
           name: ci-binary-${{ matrix.target }}

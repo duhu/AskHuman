@@ -100,6 +100,7 @@ export const submitConfirmAction = (
 
 export const confirmPopupReady = (requestId?: string) => invoke<void>("confirm_popup_ready", { requestId });
 
+export const setInteractionPaused = (paused: boolean) => invoke<void>("set_interaction_paused", { paused });
 export const cancelPopup = (requestId?: string) => invoke<void>("cancel_popup", { requestId });
 
 export const openPath = (path: string) => invoke<void>("open_path", { path });

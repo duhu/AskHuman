@@ -879,25 +879,28 @@ pub fn run_confirm(mut task: crate::ipc::ConfirmTask) -> Option<crate::models::C
         .enable_all()
         .build()
         .ok()?;
-    let result = runtime.block_on(async move {
-        if task.development.as_ref().is_some_and(|info| info.relay) {
-            crate::development::relay::check_peer().await.ok()?;
-        } else {
-            ensure_running().await.ok()?;
-        }
-        let (mut reader, mut writer) = connect_split().await.ok()?;
-        ipc::write_msg(&mut writer, &ClientMsg::Hello(hello()))
-            .await
-            .ok()?;
-        match ipc::read_msg::<_, ServerMsg>(&mut reader).await {
-            Ok(Some(ServerMsg::HelloAck(ack))) if ack.status == HelloStatus::Ok => {}
-            _ => return None,
-        }
-        ipc::write_msg(&mut writer, &ClientMsg::SubmitConfirm(Box::new(task)))
-            .await
-            .ok()?;
-        read_confirm_frames(&mut reader).await
-    });
+    let result = runtime
+        .block_on(crate::interaction_control::while_active(async move {
+            if task.development.as_ref().is_some_and(|info| info.relay) {
+                crate::development::relay::check_peer().await.ok()?;
+            } else {
+                ensure_running().await.ok()?;
+            }
+            let (mut reader, mut writer) = connect_split().await.ok()?;
+            ipc::write_msg(&mut writer, &ClientMsg::Hello(hello()))
+                .await
+                .ok()?;
+            match ipc::read_msg::<_, ServerMsg>(&mut reader).await {
+                Ok(Some(ServerMsg::HelloAck(ack))) if ack.status == HelloStatus::Ok => {}
+                _ => return None,
+            }
+            ipc::write_msg(&mut writer, &ClientMsg::SubmitConfirm(Box::new(task)))
+                .await
+                .ok()?;
+            read_confirm_frames(&mut reader).await
+        }))
+        .ok()
+        .flatten();
     if let Some(info) = info.filter(|info| !info.relay) {
         let stdout = result
             .as_ref()
@@ -973,6 +976,18 @@ async fn run_ask_async(task: crate::ipc::TaskRequest) -> i32 {
 }
 
 async fn run_ask_final_async(task: crate::ipc::TaskRequest, verbose: bool) -> AskFinal {
+    let notice = crate::interaction_control::request_notice(&task);
+    let text_output = task.output_format == crate::models::OutputFormat::Text;
+    match crate::interaction_control::while_active(run_ask_transport_async(task, verbose)).await {
+        Ok(result) => result,
+        Err(()) => AskFinal {
+            stdout: if text_output { notice } else { String::new() },
+            exit_code: if text_output { 0 } else { 3 },
+        },
+    }
+}
+
+async fn run_ask_transport_async(task: crate::ipc::TaskRequest, verbose: bool) -> AskFinal {
     use crate::ipc::ServerMsg;
 
     // 外层循环：撞上 Daemon 排空（draining）时无限等待其下线，然后重置重试预算重来。

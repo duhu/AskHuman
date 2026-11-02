@@ -45,6 +45,13 @@ const CODEX_SESSION_START: EventSpec = EventSpec {
     flat: false,
     context_limit: Some(0),
 };
+const INTERACTION_STATUS: EventSpec = EventSpec {
+    event: "UserPromptSubmit",
+    runtime_event: "interaction-status",
+    matcher: None,
+    flat: false,
+    context_limit: None,
+};
 const PRE_TOOL_NESTED: EventSpec = EventSpec {
     event: "PreToolUse",
     runtime_event: "pre-tool-use",
@@ -62,8 +69,8 @@ const PRE_TOOL_CURSOR: EventSpec = EventSpec {
 
 fn all_specs(target: AgentTarget) -> &'static [EventSpec] {
     match target {
-        AgentTarget::ClaudeCode => &[SESSION_START, PRE_TOOL_NESTED],
-        AgentTarget::Codex => &[CODEX_SESSION_START],
+        AgentTarget::ClaudeCode => &[SESSION_START, PRE_TOOL_NESTED, INTERACTION_STATUS],
+        AgentTarget::Codex => &[CODEX_SESSION_START, INTERACTION_STATUS],
         AgentTarget::Cursor => &[PRE_TOOL_CURSOR],
         AgentTarget::Grok => &[PRE_TOOL_NESTED],
         AgentTarget::Pi | AgentTarget::Antigravity => &[],
@@ -71,6 +78,9 @@ fn all_specs(target: AgentTarget) -> &'static [EventSpec] {
 }
 
 fn desired(target: AgentTarget, mode: Mode, spec: EventSpec) -> bool {
+    if spec.runtime_event == "interaction-status" {
+        return mode != Mode::None;
+    }
     match mode {
         Mode::None => false,
         Mode::Cli => {
@@ -415,15 +425,27 @@ mod tests {
     fn desired_matrix_is_mode_specific() {
         let cases = [
             (AgentTarget::ClaudeCode, Mode::None, vec![]),
-            (AgentTarget::ClaudeCode, Mode::Cli, vec!["session-start"]),
+            (
+                AgentTarget::ClaudeCode,
+                Mode::Cli,
+                vec!["session-start", "interaction-status"],
+            ),
             (
                 AgentTarget::ClaudeCode,
                 Mode::Mcp,
-                vec!["session-start", "pre-tool-use"],
+                vec!["session-start", "pre-tool-use", "interaction-status"],
             ),
             (AgentTarget::Codex, Mode::None, vec![]),
-            (AgentTarget::Codex, Mode::Cli, vec!["session-start"]),
-            (AgentTarget::Codex, Mode::Mcp, vec!["session-start"]),
+            (
+                AgentTarget::Codex,
+                Mode::Cli,
+                vec!["session-start", "interaction-status"],
+            ),
+            (
+                AgentTarget::Codex,
+                Mode::Mcp,
+                vec!["session-start", "interaction-status"],
+            ),
             (AgentTarget::Cursor, Mode::None, vec![]),
             (AgentTarget::Cursor, Mode::Cli, vec![]),
             (AgentTarget::Cursor, Mode::Mcp, vec!["pre-tool-use"]),
@@ -540,6 +562,26 @@ mod tests {
     }
 
     #[test]
+    fn prompt_submit_status_is_owned_by_both_modes_and_removed_with_integration() {
+        for target in [AgentTarget::ClaudeCode, AgentTarget::Codex] {
+            for mode in [Mode::Cli, Mode::Mcp] {
+                let text = reconcile_text(target, mode, "{}").unwrap();
+                let groups = hook_edit::nested_groups(&text, "UserPromptSubmit").unwrap();
+                assert_eq!(groups.len(), 1);
+                assert!(groups[0]["hooks"][0]["command"]
+                    .as_str()
+                    .unwrap()
+                    .contains("interaction-status"));
+                let legacy =
+                    hook_edit::remove_nested_marker(&text, "UserPromptSubmit", MARKER).unwrap();
+                assert!(status_from_text(target, mode, &legacy, true).outdated);
+                let removed = reconcile_text(target, Mode::None, &text).unwrap();
+                assert!(!removed.contains("interaction-status"));
+            }
+        }
+    }
+
+    #[test]
     fn codex_protocol_hook_runs_for_every_source_without_a_spill_limit() {
         for mode in [Mode::Cli, Mode::Mcp] {
             let text = reconcile_text(AgentTarget::Codex, mode, "{}").unwrap();
@@ -579,8 +621,14 @@ mod tests {
             }
             handler
         };
-        let build =
-            |group: Value| serde_json::json!({"hooks": {"SessionStart": [group]}}).to_string();
+        let build = |group: Value| {
+            let base = serde_json::json!({"hooks": {"SessionStart": [group]}}).to_string();
+            let desired = reconcile_text(AgentTarget::Codex, Mode::Cli, "{}").unwrap();
+            let desired: Value = serde_json::from_str(&desired).unwrap();
+            let mut value: Value = serde_json::from_str(&base).unwrap();
+            value["hooks"]["UserPromptSubmit"] = desired["hooks"]["UserPromptSubmit"].clone();
+            value.to_string()
+        };
         let exact = build(serde_json::json!({
             "hooks": [handler(serde_json::json!({"additionalContextLimit": 0}))]
         }));
@@ -617,7 +665,7 @@ mod tests {
             // Reconciling rewrites it to the exact identity.
             let fixed = reconcile_text(AgentTarget::Codex, Mode::Cli, &text).unwrap();
             assert!(!status_from_text(AgentTarget::Codex, Mode::Cli, &fixed, true).outdated);
-            assert_eq!(fixed.matches(MARKER).count(), 1);
+            assert_eq!(fixed.matches(MARKER).count(), 2);
         }
     }
 
@@ -634,14 +682,14 @@ mod tests {
         assert!(installed.contains("// keep this comment"));
         assert!(installed.contains("user-start"));
         assert!(installed.contains("__agent-hook claude activity"));
-        assert_eq!(installed.matches(MARKER).count(), 2);
+        assert_eq!(installed.matches(MARKER).count(), 3);
         assert_eq!(
             reconcile_text(AgentTarget::ClaudeCode, Mode::Mcp, &installed).unwrap(),
             installed
         );
 
         let cli = reconcile_text(AgentTarget::ClaudeCode, Mode::Cli, &installed).unwrap();
-        assert_eq!(cli.matches(MARKER).count(), 1);
+        assert_eq!(cli.matches(MARKER).count(), 2);
         assert!(cli.contains("user-start"));
         assert!(cli.contains("__agent-hook claude activity"));
 

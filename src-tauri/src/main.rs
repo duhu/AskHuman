@@ -44,6 +44,7 @@ mod i18n;
 mod idle;
 mod image_resource;
 mod integrations;
+mod interaction_control;
 mod ios;
 mod ipc;
 #[cfg(target_os = "linux")]

@@ -36,6 +36,7 @@ pub enum ConfirmTerminalKind {
 pub type ConfirmFinalizer = Arc<dyn Fn(ConfirmResult) -> ConfirmResult + Send + Sync>;
 
 pub struct ConfirmCoordinator {
+    interaction_state: crate::interaction_control::State,
     request: Arc<ConfirmRequest>,
     terminal: FirstTerminalGate<Terminal>,
     tx: UnboundedSender<ConfirmOutcome>,
@@ -59,6 +60,7 @@ impl ConfirmCoordinator {
             terminal: FirstTerminalGate::new(),
             tx,
             finalizer,
+            interaction_state: crate::interaction_control::snapshot(),
             submit_lock: Mutex::new(()),
         })
     }
@@ -79,7 +81,9 @@ impl ConfirmCoordinator {
             .request
             .resolve_submission(choice_index, comment, source_channel_id)?;
         let _guard = self.submit_lock.lock().unwrap();
-        if self.terminal.is_set() {
+        if self.terminal.is_set()
+            || crate::interaction_control::interrupted_since(&self.interaction_state)
+        {
             return Ok(false);
         }
         let result = match &self.finalizer {

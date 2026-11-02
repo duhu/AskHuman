@@ -40,7 +40,8 @@ fn run_inner(args: &[String]) -> Option<Value> {
         return None;
     }
     let track = args.get(1).is_some_and(|value| value == "track");
-    let confirm = args.iter().skip(1).any(|value| value == "confirm");
+    let confirm = args.iter().skip(1).any(|value| value == "confirm")
+        && !crate::interaction_control::paused();
     let env = super::detect::env_snapshot();
     if super::report::should_skip(kind, &env) {
         return None;

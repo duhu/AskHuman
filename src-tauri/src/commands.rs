@@ -1415,6 +1415,11 @@ pub fn confirm_popup_ready(app: AppHandle, request_id: Option<String>) -> Result
 }
 
 #[tauri::command]
+pub fn set_interaction_paused(paused: bool) -> Result<(), String> {
+    crate::interaction_control::set_paused(paused).map_err(|error| error.to_string())
+}
+
+#[tauri::command]
 pub async fn cancel_popup(app: AppHandle, request_id: Option<String>) -> Result<(), String> {
     if let Some(inbox) = app.try_state::<crate::app::popup_inbox::Inbox>() {
         let id = request_id.ok_or("shared cancellation requires a request ID")?;
